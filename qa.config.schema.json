@@ -1,0 +1,117 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "QA agents configuration",
+  "description": "Per-team settings for the test case drafting and QMetry push workflow. Secrets never go here; they belong in .env.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "jira",
+    "qmetry"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "team": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Shown in generated documents."
+        },
+        "documentRole": {
+          "type": "string",
+          "default": "Developers",
+          "description": "What generated documents call the engineering role."
+        }
+      }
+    },
+    "jira": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "site",
+        "projectKey"
+      ],
+      "properties": {
+        "site": {
+          "type": "string",
+          "description": "Atlassian site host, e.g. your-site.atlassian.net. Used through the Atlassian MCP, never called directly.",
+          "pattern": "^[A-Za-z0-9.-]+$"
+        },
+        "projectKey": {
+          "type": "string",
+          "description": "Default Jira project key, e.g. PROJ.",
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        }
+      }
+    },
+    "qmetry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "projectKey"
+      ],
+      "properties": {
+        "baseUrl": {
+          "type": "string",
+          "description": "QMetry Open API base URL. Change it for a non-global region, e.g. https://syd-qtmcloud.qmetry.com/rest/api/latest.",
+          "format": "uri"
+        },
+        "projectKey": {
+          "type": "string",
+          "description": "QMetry project key. Usually the same as the Jira project key.",
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        },
+        "priorityMap": {
+          "type": "object",
+          "description": "CSV priority name to QMetry priority name. The CSV uses High, Normal and Low; map each to a priority your project defines.",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "caseStatus": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Test case status to set on push, e.g. Done. null leaves the project default."
+        },
+        "labels": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether a push creates and applies labels (ticket key, category, technique, level)."
+        },
+        "mainFolder": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Default main test case folder path, e.g. Sprint_26. null means the push asks every time."
+        },
+        "markAiGenerated": {
+          "type": "boolean",
+          "default": true,
+          "description": "Sets QMetry's aiGenerated flag on every pushed test case, so cases drafted by the test-craft agent can be filtered and reported on in QMetry. Turn off only if your governance policy says otherwise."
+        }
+      }
+    },
+    "testCases": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "defaultTier": {
+          "type": "string",
+          "enum": [
+            "smoke",
+            "critical",
+            "full"
+          ],
+          "default": "critical",
+          "description": "Coverage tier used when /test-craft is run without one."
+        }
+      }
+    }
+  }
+}

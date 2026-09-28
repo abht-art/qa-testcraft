@@ -1,0 +1,17 @@
+# Secrets
+.env
+.env.local
+
+# Per-team settings: each clone creates its own with /qa-setup (qa.config.example.json is the template)
+qa.config.json
+
+# Personal Claude Code settings
+.claude/settings.local.json
+
+.DS_Store
+
+# Dependencies
+node_modules/
+
+# Generated output stays on the machine that made it: drafted CSVs, push logs, sprint plans, audit history
+docs/

@@ -1,0 +1,27 @@
+{
+  "$schema": "./qa.config.schema.json",
+  "team": {
+    "name": "Your team",
+    "documentRole": "Developers"
+  },
+  "jira": {
+    "site": "your-site.atlassian.net",
+    "projectKey": "PROJ"
+  },
+  "qmetry": {
+    "baseUrl": "https://qtmcloud.qmetry.com/rest/api/latest",
+    "projectKey": "PROJ",
+    "priorityMap": {
+      "High": "High",
+      "Normal": "Medium",
+      "Low": "Low"
+    },
+    "caseStatus": null,
+    "labels": true,
+    "mainFolder": null,
+    "markAiGenerated": true
+  },
+  "testCases": {
+    "defaultTier": "critical"
+  }
+}

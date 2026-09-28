@@ -1,0 +1,19 @@
+{
+  "name": "qa-agents-qmetry",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "doctor": "node scripts/qmetry-api.ts doctor",
+    "typecheck": "tsc",
+    "qmetry": "node scripts/qmetry-api.ts",
+    "qmetry:import-results": "node scripts/qmetry-import-results.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.0",
+    "typescript": "^5.9.0"
+  },
+  "description": "Claude Code agents, commands and skills that draft test cases from Jira tickets and push them into QMetry Test Management for Jira."
+}

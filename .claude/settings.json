@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(node scripts/qmetry-api.ts doctor)",
+      "Bash(node scripts/qmetry-api.ts check)",
+      "Bash(node scripts/qmetry-api.ts projects)",
+      "Bash(node scripts/qmetry-api.ts meta *)",
+      "Bash(node scripts/qmetry-api.ts meta)",
+      "Bash(node scripts/qmetry-api.ts folders *)",
+      "Bash(node scripts/qmetry-api.ts folders)",
+      "Bash(node scripts/qmetry-api.ts plans *)",
+      "Bash(node scripts/qmetry-api.ts plans)",
+      "Bash(node scripts/qmetry-api.ts search-testcases *)",
+      "Bash(node scripts/qmetry-api.ts testcase *)",
+      "Bash(node scripts/qmetry-api.ts validate *)",
+      "Bash(node scripts/qmetry-api.ts verify *)",
+      "Bash(npm run typecheck)"
+    ],
+    "ask": [
+      "Bash(node scripts/qmetry-api.ts push *)",
+      "Bash(node scripts/qmetry-api.ts rollback *)",
+      "Bash(node scripts/qmetry-api.ts create-folder *)",
+      "Bash(npm run qmetry *)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.local)",
+      "Edit(./.env)",
+      "Edit(./.env.local)",
+      "Bash(cat .env*)",
+      "Bash(cat ./.env*)",
+      "Bash(less .env*)",
+      "Bash(head .env*)",
+      "Bash(tail .env*)",
+      "Bash(grep * .env*)",
+      "Bash(source .env*)",
+      "Edit(./docs/test-cases/*-qmetry-push.json)",
+      "Write(./docs/test-cases/*-qmetry-push.json)",
+      "Read(./node_modules/**)",
+      "Read(./package-lock.json)",
+      "Read(./**/.DS_Store)",
+      "Read(./docs/audit/**)",
+      "Edit(./docs/audit/**)",
+      "Write(./docs/audit/**)"
+    ]
+  }
+}
