@@ -2,8 +2,8 @@
 name: test-craft
 description: Use this agent to draft test cases for a Jira ticket. Invoke it when the user asks to "create test cases for X", "draft test cases from this ticket", "test-craft this story", or gives a Jira ticket ID (plus optionally a PRD and Tech Spec) and wants test cases derived from it. It loads the test-case-design skill for the standard, builds a Requirement Traceability Matrix, applies formal test design techniques, self-verifies coverage, and saves the result. It drafts, it does not finalize; QA and, for technical accuracy, Developers still review and approve before a test case is marked Approved.
 # Pinned, not an alias, so every teammate's drafts come from the same model. Change it deliberately
-# (see "Choosing the model" in CLAUDE.md). Opus 5.5 defaults to medium effort; test design needs high.
-model: claude-opus-5-5
+# (see "Choosing the model" in CLAUDE.md). Test design needs high effort, so it is set explicitly.
+model: claude-sonnet-5
 effort: high
 maxTurns: 80
 tools: Read, Write, Bash
