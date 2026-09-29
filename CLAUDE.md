@@ -66,10 +66,10 @@ Flow: `/test-craft` gathers inputs, then the agent writes `docs/test-cases/<tick
 
 ## Choosing the model
 
-The `test-craft` agent is pinned to `claude-opus-5-5` at `effort: high`. Test design is reasoning-heavy (decision tables, boundaries, contradictions across sources, a long self-audit), and Opus 5.5 defaults to `medium` effort, so `high` is set explicitly. The model is pinned rather than aliased, so every teammate's drafts come from the same model. Change it in the agent's frontmatter as a reviewed change:
+The `test-craft` agent is pinned to `claude-sonnet-5` at `effort: high`. Test design is reasoning-heavy (decision tables, boundaries, contradictions across sources, a long self-audit), so `high` is set explicitly. Sonnet 5 is half the cost of Opus 5.5; expect more checklist items to come back to the reviewer. The model is pinned rather than aliased, so every teammate's drafts come from the same model. Change it in the agent's frontmatter as a reviewed change:
 
-- `claude-fable-5-1`: the most capable model, for very large or ambiguous tickets. Costs 2.5 times as much per token and takes longer.
-- `claude-sonnet-5`: half the cost of Opus 5.5, for high volume at Smoke tier. Expect more checklist items to come back to the reviewer.
+- `claude-opus-5-5`: stronger reasoning for complex tickets, at twice the cost of Sonnet 5.
+- `claude-fable-5-1`: the most capable model, for very large or ambiguous tickets. Costs 2.5 times as much per token as Opus 5.5 and takes longer.
 
 ## House style (all generated documents)
 
