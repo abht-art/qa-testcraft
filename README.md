@@ -216,7 +216,7 @@ Because push logs are local, resume and rollback must run on the machine that di
 - Coverage tier is `smoke`, `critical` (the default, from `testCases.defaultTier`), or `full`.
 - Output: `docs/test-cases/proj-123-test-cases.csv` (one row per case, with steps, test data and expected results as matching numbered lines) and `docs/test-cases/proj-123-rtm.csv`.
 - Every drafted case is `Draft`. QA reviews the CSVs, and Developers check technical accuracy, before anything goes into QMetry.
-- Duplicates are checked against the other CSVs in `docs/test-cases/` and against QMetry itself.
+- Duplicates are checked against QMetry only, through the read-only search. Local CSVs of other tickets are not read, since they may be unreviewed drafts.
 - The agent runs on a pinned model (`claude-sonnet-5`, `effort: high`) so every teammate's drafts come from the same model. `CLAUDE.md` explains when to change it.
 
 ### Push reviewed test cases into QMetry
