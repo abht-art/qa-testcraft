@@ -125,6 +125,8 @@ Start Claude Code in the repository, run `/mcp`, and log in to Atlassian. It is 
 
 If your tickets link designs, add the Figma plugin and log in the same way. Figma only lets connected tools read files owned by a team the logged-in account belongs to; if a design can't be read, export the frames as a PDF and pass it with `--figma <path>`.
 
+`/test-craft` only reads the design for frontend tickets, meaning tickets whose summary contains the word "frontend". Other tickets skip Figma entirely unless you pass `--figma`. When asked about a design, you can choose to continue without it; the draft then lists it under Gaps Flagged.
+
 QMetry is reached through its REST API by the scripts, not through an MCP server.
 
 ### 4. Add the QMetry API keys

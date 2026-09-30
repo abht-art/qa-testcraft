@@ -15,7 +15,7 @@ Input: $ARGUMENTS
 - **Coverage tier**: `smoke`, `critical`, or `full`. Defaults to `testCases.defaultTier` in `qa.config.json` (`critical` unless the team changed it). Say which tier you used.
 - **`--prd <path or link>`**: the PRD document, optional.
 - **`--spec <path or link>`**: the Tech Spec document, optional.
-- **`--figma <link or path>`**: a Figma design link, or a local PDF or image exported from Figma, optional. Only needed when the ticket doesn't already link the design, or the link can't be opened.
+- **`--figma <link or path>`**: a Figma design link, or a local PDF or image exported from Figma, optional. Only needed when the ticket doesn't already link the design, or the link can't be opened. Giving it also makes the design be read on a ticket that isn't a frontend ticket.
 
 Use the flags rather than guessing from position, so a single document reference isn't ambiguous between the PRD, the Tech Spec, and the design.
 
@@ -28,9 +28,17 @@ Do this here, in the main conversation, not inside the agent. The agent runs aut
 3. Pull the ticket's title, description, and Acceptance Criteria through the Atlassian MCP: `getAccessibleAtlassianResources` once for the cloud ID, then `getJiraIssue` with `view: "evidence"` so custom fields come back, including the `Figma` field. Note the numeric issue ID too; the agent uses it to find cases QMetry already links to the ticket.
 4. If the Atlassian MCP isn't available, ask the user to paste the ticket content, and wait for it. Do not launch the agent without it, an agent launched with only a ticket ID and no way to read it will come straight back asking for the content, wasting the round trip.
 5. If a PRD or Tech Spec was given, read the relevant content so you can hand the agent the actual text rather than a path it may not be able to reach. Read a local path with the file tools, and a Confluence link with `getConfluenceContent`.
-6. Read the Figma design, if there is one. See "Read the design" below.
+6. Decide whether the design is needed. See "Read the design" below.
 
 ## Read the design
+
+Only frontend tickets need the design. A ticket is a frontend ticket when its summary contains the word "frontend" (any capitalization).
+
+- **Not a frontend ticket, and no `--figma` flag:** skip this whole section. Don't read the ticket's Figma link and don't ask about the design, even if the ticket links one. Tell the agent the design was skipped because it is not a frontend ticket, so it isn't reported as a gap.
+- **Not a frontend ticket, but `--figma` was given:** the user asked for the design, so read it as below.
+- **Frontend ticket:** read the design as below. If it links no design and no `--figma` was given, ask the user for a Figma link or an exported PDF, or whether to continue without the design.
+
+The user can skip the design at any point when they are asked about it. If they do, tell the agent the design was skipped by the user, so it lands in Gaps Flagged.
 
 Collect every Figma design link: the ticket's `Figma` field, any `figma.com/design/` link in the description, and the `--figma` flag. If `--figma` is a local PDF or image export, read it with Read and go straight to step 3. Read each one here rather than leaving it to the agent, because a design that can't be opened needs a question to the user.
 
@@ -45,7 +53,7 @@ Collect every Figma design link: the ticket's `Figma` field, any `figma.com/desi
 
 ## Launch the agent
 
-Launch `test-craft` (via the Agent tool, subagent_type `test-craft`), passing the ticket content, the numeric Jira issue ID, coverage tier, any PRD or Tech Spec content, and the design notes (or that a linked design couldn't be read) you gathered, as text in the prompt. Never describe a linked design to the agent as optional.
+Launch `test-craft` (via the Agent tool, subagent_type `test-craft`), passing the ticket content, the numeric Jira issue ID, coverage tier, any PRD or Tech Spec content, and the design notes you gathered (or that a linked design couldn't be read, was skipped by the user, or was skipped because the ticket isn't a frontend ticket), as text in the prompt. Never describe a design you read to the agent as optional.
 
 It loads the `test-case-design` skill for the standard, then runs five phases (builds a Requirement Traceability Matrix, selects test design techniques, drafts cases, verifies coverage, duplication, and regression impact, then runs the review checklist over the whole draft), and writes two CSV files into `docs/test-cases/`: the test cases (one row per case with numbered steps, mapped to QMetry fields) and the traceability matrix.
 
