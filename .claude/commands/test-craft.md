@@ -1,17 +1,17 @@
 ---
 description: Draft test cases for a Jira ticket using the test-craft agent
-argument-hint: <ticket-id> [smoke|critical|full] [--prd path] [--spec path] [--figma link-or-path]
+argument-hint: <ticket-id>[,<ticket-id>...] [smoke|critical|full] [--prd path] [--spec path] [--figma link-or-path]
 ---
 
 # Test Craft
 
-Gather the inputs, then launch the `test-craft` agent to draft test cases.
+Gather the inputs with the `ticket-brief` agent, settle any questions, then launch the `test-craft` agent to draft test cases.
 
 Input: $ARGUMENTS
 
 ## Parse the arguments
 
-- **Ticket ID**: required. Ask for it if missing.
+- **Ticket ID**: required. Ask for it if missing. Several IDs, comma or space separated, draft each ticket in its own agent, in parallel (see "Several tickets" below).
 - **Coverage tier**: `smoke`, `critical`, or `full`. Defaults to `testCases.defaultTier` in `qa.config.json` (`critical` unless the team changed it). Say which tier you used.
 - **`--prd <path or link>`**: the PRD document, optional.
 - **`--spec <path or link>`**: the Tech Spec document, optional.
@@ -19,46 +19,29 @@ Input: $ARGUMENTS
 
 Use the flags rather than guessing from position, so a single document reference isn't ambiguous between the PRD, the Tech Spec, and the design.
 
-## Gather the ticket content before launching the agent
+## Gather the inputs before launching the agent
 
-Do this here, in the main conversation, not inside the agent. The agent runs autonomously and can't hold a back-and-forth, so anything needing a question has to be settled first.
+The `test-craft` agent runs autonomously and can't hold a back-and-forth, so anything needing a question is settled here first. The reading itself is done by the `ticket-brief` agent, so the raw Jira issue, documents and Figma screenshots stay out of this conversation, which resends its whole context on every turn.
 
-1. If `docs/test-cases/<ticket-id>-qmetry-push.json` exists and its state isn't `"rolled_back"`, stop: the ticket's test cases are already in QMetry. Name the push log and don't launch the agent.
-2. If `docs/test-cases/<ticket-id>-test-cases.csv` or `<ticket-id>-rtm.csv` already exists, ask the user before continuing, since it may have been reviewed or edited. If they agree, tell the agent it may overwrite them.
-3. Pull the ticket's title, description, and Acceptance Criteria through the Atlassian MCP: `getAccessibleAtlassianResources` once for the cloud ID, then `getJiraIssue` with `view: "evidence"` so custom fields come back, including the `Figma` field. Note the numeric issue ID too; the agent uses it to find cases QMetry already links to the ticket.
-4. If the Atlassian MCP isn't available, ask the user to paste the ticket content, and wait for it. Do not launch the agent without it, an agent launched with only a ticket ID and no way to read it will come straight back asking for the content, wasting the round trip.
-5. If a PRD or Tech Spec was given, read the relevant content so you can hand the agent the actual text rather than a path it may not be able to reach. Read a local path with the file tools, and a Confluence link with `getConfluenceContent`.
-6. Decide whether the design is needed. See "Read the design" below.
+Keep the round trips down: issue independent calls in the same turn, and ask every question the run needs in one message instead of one at a time.
 
-## Read the design
-
-Only frontend tickets need the design. A ticket is a frontend ticket when its summary contains the word "frontend" (any capitalization).
-
-- **Not a frontend ticket, and no `--figma` flag:** skip this whole section. Don't read the ticket's Figma link and don't ask about the design, even if the ticket links one. Tell the agent the design was skipped because it is not a frontend ticket, so it isn't reported as a gap.
-- **Not a frontend ticket, but `--figma` was given:** the user asked for the design, so read it as below.
-- **Frontend ticket:** read the design as below. If it links no design and no `--figma` was given, ask the user for a Figma link or an exported PDF, or whether to continue without the design.
-
-The user can skip the design at any point when they are asked about it. If they do, tell the agent the design was skipped by the user, so it lands in Gaps Flagged.
-
-Collect every Figma design link: the ticket's `Figma` field, any `figma.com/design/` link in the description, and the `--figma` flag. If `--figma` is a local PDF or image export, read it with Read and go straight to step 3. Read each one here rather than leaving it to the agent, because a design that can't be opened needs a question to the user.
-
-1. Take the file key and node ID from the link (`node-id=1549-211880` is node `1549:211880`).
-2. Call `get_metadata` on the node for the frames and layers, then `get_screenshot` on the node and on any frame that shows a state the ticket describes (dialogs, loading, error, success, empty). Download each screenshot with the curl command it returns into the scratchpad and view it with Read. Don't call `get_design_context`; it is meant for turning a design into code.
-3. Write down, as text for the agent:
-   - Each relevant frame by name, and what state it shows.
-   - All on-screen text, word for word: titles, body text, button labels, field labels, badges, toasts, and error messages.
-   - Controls and states the ticket doesn't mention (a close icon, a disabled or loading button, an inline error area).
-   - Where the design disagrees with the ticket, quoting both.
-4. If a design can't be read (no access, Figma MCP not connected, link without a node ID), tell the user the exact reason and ask whether to fix access and retry, export the frames from Figma as a PDF and give its path, or continue without the design. If `whoami` shows the connected account isn't a member of any team beyond its own, access is the likely cause: Figma only lets connected tools read files owned by a team the account belongs to. Don't continue silently. If they continue, tell the agent the design exists but wasn't read, so it lands in Gaps Flagged.
+1. **Checks, in one turn.** Read `qa.config.json` for `jira.site`. Read `docs/test-cases/<ticket-id>-qmetry-push.json`: if it exists and its state isn't `"rolled_back"`, stop: the ticket's test cases are already in QMetry. Name the push log and don't launch anything. Read `docs/test-cases/<ticket-id>-test-cases.csv` and `<ticket-id>-rtm.csv` with `limit: 1` (just to see whether they exist, without loading them); if either exists, the user's consent to overwrite is one of the questions in step 3.
+2. **Read the sources.** Launch `ticket-brief` (Agent tool, subagent_type `ticket-brief`) with the ticket key, `jira.site` as the cloud ID (or "unknown" if unset or still `your-site.atlassian.net`), any `--prd`, `--spec` and `--figma` values, and the brief path: `<scratchpad>/<ticket-id>-brief.md`, using the scratchpad directory from the system prompt, or the system temporary directory if there is none. It returns a short summary and a "Needs a decision" list; it doesn't paste the brief back, and you don't need to read it.
+3. **Ask, once.** Put everything that needs the user into one message: overwrite consent, and each "Needs a decision" item (missing or unclear Acceptance Criteria, a document that couldn't be read, a design that is missing or couldn't be read). For a design, offer: fix access and retry, give an exported PDF path, or continue without it. If the Atlassian tools weren't available, ask the user to paste the ticket content, and write it to the brief path yourself.
+4. **Follow up.** If the user gives a new design link or PDF, launch `ticket-brief` again with "design only", the design and the same brief path. If they continue without a design, tell the `test-craft` agent the design was skipped by the user. If they decline overwriting, or the Acceptance Criteria can't be turned into pass or fail checks and they have nothing more to give, stop.
 
 ## Launch the agent
 
-Launch `test-craft` (via the Agent tool, subagent_type `test-craft`), passing the ticket content, the numeric Jira issue ID, coverage tier, any PRD or Tech Spec content, and the design notes you gathered (or that a linked design couldn't be read, was skipped by the user, or was skipped because the ticket isn't a frontend ticket), as text in the prompt. Never describe a design you read to the agent as optional.
+Launch `test-craft` (Agent tool, subagent_type `test-craft`) with a short prompt: the brief path (it reads the ticket, documents and design notes from there), the numeric Jira issue ID, the coverage tier, whether it may overwrite existing CSVs, and the design status (as in the brief, or that the user skipped it). Don't copy the brief into the prompt; writing it out again only costs time. Never describe a design that was read as optional.
 
 It loads the `test-case-design` skill for the standard, then runs five phases (builds a Requirement Traceability Matrix, selects test design techniques, drafts cases, verifies coverage, duplication, and regression impact, then runs the review checklist over the whole draft), and writes two CSV files into `docs/test-cases/`: the test cases (one row per case with numbered steps, mapped to QMetry fields) and the traceability matrix.
 
+## Several tickets
+
+Do step 1 for every ticket in one turn, then launch one `ticket-brief` agent per ticket in a single message, so they read in parallel. Ask the questions for all tickets in one message. Then launch one `test-craft` agent per ticket in a single message; each writes only its own ticket's files. Report each ticket's results as its agent returns. Every agent still runs the full workflow, so parallel runs cost more tokens, not quality.
+
 ## Report back
 
-Present what it returns: both file paths, the requirements and cases counts, the coverage tier used, the verification results (including any check it couldn't perform), the checklist result with any item it marked not applicable or could not check, automation candidates, and any flagged gaps.
+Pass on what it returns without rewriting or expanding it; the details are in the CSVs. It covers both file paths, the requirements and cases counts, the coverage tier used, the verification results (including any check it couldn't perform), the checklist result with any item it marked not applicable or could not check, automation candidates, and any flagged gaps.
 
 End with the next step: once QA (and Developers, for technical accuracy) have reviewed the CSVs, run `/qmetry-push <ticket-id>`.

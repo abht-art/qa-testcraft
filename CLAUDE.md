@@ -27,7 +27,8 @@ Each concern has one owner. Change a thing where it is owned, and don't copy its
 
 | Concern | Owner |
 |---|---|
-| Gathering inputs that need a conversation (Jira, PRD, Figma, overwrite consent) | `.claude/commands/test-craft.md` |
+| Asking about inputs (overwrite consent, missing or unreadable sources) and launching the agents | `.claude/commands/test-craft.md` |
+| Reading the ticket, PRD and Tech Spec sections, and Figma design into a brief file | `.claude/agents/ticket-brief.md` |
 | Drafting workflow (RTM, techniques, draft, verify, checklist) | `.claude/agents/test-craft.md` |
 | The test case standard: tiers, CSV headers, prefixes, fields, rules | `.claude/skills/test-case-design/SKILL.md` |
 | Review checklist (agent and humans) | `.claude/skills/test-case-design/checklist.md` |
@@ -40,7 +41,7 @@ Each concern has one owner. Change a thing where it is owned, and don't copy its
 | Automated results into QMetry (CI) | `scripts/qmetry-import-results.ts` (guide in `README.md`) |
 | Sprint QA plan (self-contained template) | `.claude/skills/sprint-qa-plan/SKILL.md` |
 
-Flow: `/test-craft` gathers inputs, then the agent writes `docs/test-cases/<ticket>-test-cases.csv` and `<ticket>-rtm.csv` (ticket lowercased, written only after verification and a passing `validate`) → QA and Developers review the CSVs → `/qmetry-push` dry runs, gets a yes, pushes, and verifies → the push log `<ticket>-qmetry-push.json` records it.
+Flow: `/test-craft` has `ticket-brief` read the sources into a brief file (raw tool results stay out of the conversation), asks any questions once, then the `test-craft` agent reads the brief and writes `docs/test-cases/<ticket>-test-cases.csv` and `<ticket>-rtm.csv` (ticket lowercased, written only after verification and a passing `validate`) → QA and Developers review the CSVs → `/qmetry-push` dry runs, gets a yes, pushes, and verifies → the push log `<ticket>-qmetry-push.json` records it.
 
 `docs/` is gitignored: drafts and push logs stay on the machine that made them, so resume and rollback run from that machine. The push also asks QMetry whether the ticket already has linked cases, which is what stops a second push from another machine. All user-facing documentation lives in `README.md`; don't add documents under `docs/`.
 
@@ -66,7 +67,9 @@ Flow: `/test-craft` gathers inputs, then the agent writes `docs/test-cases/<tick
 
 ## Choosing the model
 
-The `test-craft` agent is pinned to `claude-sonnet-5` at `effort: high`. Test design is reasoning-heavy (decision tables, boundaries, contradictions across sources, a long self-audit), so `high` is set explicitly. Sonnet 5 is half the cost of Opus 5.5; expect more checklist items to come back to the reviewer. The model is pinned rather than aliased, so every teammate's drafts come from the same model. Change it in the agent's frontmatter as a reviewed change:
+The `test-craft` agent is pinned to `claude-sonnet-5` at `effort: high`. Test design is reasoning-heavy (decision tables, boundaries, contradictions across sources, a long self-audit), so `high` is set explicitly. Sonnet 5 is half the cost of Opus 5.5; expect more checklist items to come back to the reviewer. The model is pinned rather than aliased, so every teammate's drafts come from the same model. Change it in the agent's frontmatter as a reviewed change. `ticket-brief` is pinned to the same model at `effort: medium`: it transcribes rather than reasons, but on-screen text it misreads ends up in expected results, so it isn't on a smaller model.
+
+Options for `test-craft`:
 
 - `claude-opus-5-5`: stronger reasoning for complex tickets, at twice the cost of Sonnet 5.
 - `claude-fable-5-1`: the most capable model, for very large or ambiguous tickets. Costs 2.5 times as much per token as Opus 5.5 and takes longer.

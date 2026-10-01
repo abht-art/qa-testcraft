@@ -19,14 +19,15 @@ Any team can use it: clone the repository, add a QMetry token to `.env`, run `/q
 
 ```mermaid
 flowchart TD
-    J[Jira ticket<br/>+ PRD, Tech Spec, Figma] --> TC["/test-craft PROJ-123<br/>gathers inputs in the conversation"]
-    TC -->|ticket text, issue ID, design notes| AG["test-craft agent<br/>Opus 5.5, read-only"]
+    J[Jira ticket<br/>+ PRD, Tech Spec, Figma] --> TB["ticket-brief agent<br/>reads them into a brief file"]
+    TB -->|short summary, questions| TC["/test-craft PROJ-123<br/>asks any questions once"]
+    TC -->|brief path, issue ID, tier| AG["test-craft agent<br/>Sonnet 5, read-only"]
     SK[(test-case-design skill<br/>standard + checklist)] -.loaded first.-> AG
     QS[(QMetry<br/>existing cases)] -.search-testcases<br/>duplicate + regression check.-> AG
     AG --> RTM[1 Build the Requirement<br/>Traceability Matrix]
     RTM --> TQ[2 Pick techniques] --> DR[3 Draft cases] --> VF[4 Verify coverage,<br/>duplicates, regression] --> CL[5 Run the checklist]
     CL --> VAL{validate<br/>passes?}
-    VAL -->|no: fix and rewrite| DR
+    VAL -->|no: fix the failing fields| DR
     VAL -->|yes| CSV[/docs/test-cases/<br/>proj-123-test-cases.csv<br/>proj-123-rtm.csv/]
     CSV --> PR["Human review gate<br/>QA + Developers review the CSVs"]
     PR -->|changes needed| CSV
@@ -70,7 +71,7 @@ sequenceDiagram
 | Piece | What it does |
 |---|---|
 | `/qa-setup` command | Creates `qa.config.json` from `qa.config.example.json` and fills it with live values: Jira site and project from the Atlassian MCP; QMetry project, priorities, statuses and folders from `scripts/qmetry-api.ts` |
-| `/test-craft` command + `test-craft` agent | Pulls a Jira ticket (and its linked Figma design), builds the Requirement Traceability Matrix, designs test cases, checks QMetry for duplicates, runs the review checklist and `validate`, and writes two CSVs to `docs/test-cases/` |
+| `/test-craft` command + `ticket-brief` and `test-craft` agents | `ticket-brief` reads a Jira ticket, its PRD and Tech Spec sections and its Figma design into a brief file, so the conversation stays small; `test-craft` reads the brief, builds the Requirement Traceability Matrix, designs test cases, checks QMetry for duplicates, runs the review checklist and `validate`, and writes two CSVs to `docs/test-cases/` |
 | `test-case-design` skill | The test case standard: coverage tiers, techniques, CSV format, review checklist |
 | `/qmetry-push` command + `qmetry-push` skill | Pushes reviewed test cases into QMetry: subfolder, test cases with steps and labels, Jira links, test cycle, test plan. Dry run first, a push log throughout, verification at the end, rollback on request |
 | `sprint-qa-plan` skill | Generates the Sprint QA Planning & Sign-off document in `docs/qa-planning/` |
@@ -216,6 +217,8 @@ Because push logs are local, resume and rollback must run on the machine that di
 ```
 
 - Coverage tier is `smoke`, `critical` (the default, from `testCases.defaultTier`), or `full`.
+- Several tickets at once: `/test-craft PROJ-123,PROJ-124 critical`. Questions for all of them come in one round, then one agent per ticket drafts in parallel. This costs more tokens but not quality.
+- For a faster run, put everything in the first message: the tier, the documents, and the Figma link or exported PDF. Each question asked mid-run is a wait on you plus an extra model turn.
 - Output: `docs/test-cases/proj-123-test-cases.csv` (one row per case, with steps, test data and expected results as matching numbered lines) and `docs/test-cases/proj-123-rtm.csv`.
 - Every drafted case is `Draft`. QA reviews the CSVs, and Developers check technical accuracy, before anything goes into QMetry.
 - Duplicates are checked against QMetry only, through the read-only search. Local CSVs of other tickets are not read, since they may be unreviewed drafts.
@@ -246,6 +249,7 @@ node scripts/qmetry-api.ts plans                                     # test plan
 node scripts/qmetry-api.ts search-testcases --text "login" --limit 20    # existing cases by key/summary
 node scripts/qmetry-api.ts search-testcases --issue-id 13210         # cases linked to a ticket
 node scripts/qmetry-api.ts testcase --key PROJ-TC-3                  # one case with its steps
+node scripts/qmetry-api.ts testcase --key PROJ-TC-3,PROJ-TC-7        # several, fetched in parallel
 node scripts/qmetry-api.ts validate --ticket PROJ-123                # lint the CSVs, no network
 node scripts/qmetry-api.ts create-folder --name Sprint_27 --root
 node scripts/qmetry-api.ts push --ticket PROJ-123 --issue-id 13210 --reviewer "Name" --name PROJ-123 \
@@ -440,6 +444,7 @@ Nothing is ever created on exit codes 2 or 3.
 ```
 .claude/
   agents/test-craft.md            drafting workflow (model and tools in the frontmatter)
+  agents/ticket-brief.md          reads the ticket, documents and design into a brief for /test-craft
   commands/qa-setup.md            /qa-setup (creates qa.config.json)
   commands/test-craft.md          /test-craft
   commands/qmetry-push.md         /qmetry-push

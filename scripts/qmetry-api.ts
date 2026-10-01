@@ -13,7 +13,7 @@
  *   node scripts/qmetry-api.ts create-folder --project PROJ --name Sprint_26 (--parent-id 123 | --root) [--type testcase]
  *   node scripts/qmetry-api.ts plans --project PROJ
  *   node scripts/qmetry-api.ts search-testcases [--text "login"] [--label PROJ-123] [--issue-id 13227] [--folder-id 123] [--limit 50]
- *   node scripts/qmetry-api.ts testcase --key PROJ-TC-3 [--version 1]
+ *   node scripts/qmetry-api.ts testcase --key PROJ-TC-3[,PROJ-TC-7,...] [--version 1]
  *   node scripts/qmetry-api.ts validate --ticket PROJ-123
  *   node scripts/qmetry-api.ts push --ticket PROJ-123 --issue-id 13227 --reviewer "Name" --name PROJ-123
  *        (--folder Sprint_26 | --folder-id 123) (--plan PROJ-TP-1 | --new-plan "Sprint 26" | --no-plan)
@@ -80,6 +80,10 @@ function fail(message: string, code = 1): never {
   console.error(JSON.stringify({ error: message }));
   process.exit(code);
 }
+
+// Indented for a person at a terminal; compact when piped or read by Claude, where the indentation
+// is only extra tokens on every later turn.
+const INDENT = process.stdout.isTTY ? 2 : undefined;
 
 function progress(message: string): void {
   console.error(message);
@@ -513,11 +517,11 @@ async function projects(): Promise<void> {
     out.push(...data.filter((p) => p.qmetryEnabled !== false).map((p) => ({ id: p.id, key: p.key, name: p.name })));
     if (data.length < SEARCH_PAGE || startAt + data.length >= (resp.total ?? 0)) break;
   }
-  console.log(JSON.stringify(out, null, 2));
+  console.log(JSON.stringify(out, null, INDENT));
 }
 
 async function project(key: string): Promise<void> {
-  console.log(JSON.stringify(await projectByKey(key), null, 2));
+  console.log(JSON.stringify(await projectByKey(key), null, INDENT));
 }
 
 async function meta(key: string): Promise<void> {
@@ -537,14 +541,14 @@ async function meta(key: string): Promise<void> {
     testCycleStatuses: slim(testCycleStatuses),
     testPlanStatuses: slim(testPlanStatuses),
     labelCount: labels.length,
-  }, null, 2));
+  }, null, INDENT));
 }
 
 async function folders(key: string, type: FolderType): Promise<void> {
   const p = await projectByKey(key);
   const list = await listFolders(p.id, type);
   list.sort((a, b) => a.path.toLowerCase().localeCompare(b.path.toLowerCase()));
-  console.log(JSON.stringify(list, null, 2));
+  console.log(JSON.stringify(list, null, INDENT));
 }
 
 async function createFolder(key: string, name: string, parentId: number, type: FolderType): Promise<void> {
@@ -564,7 +568,7 @@ async function createFolder(key: string, name: string, parentId: number, type: F
 async function plans(key: string): Promise<void> {
   const p = await projectByKey(key);
   const list = await qtm.testPlans.searchAll({ projectId: p.id });
-  console.log(JSON.stringify(list.map((x) => ({ id: x.id, key: x.key, summary: x.summary, status: x.status?.name ?? null })), null, 2));
+  console.log(JSON.stringify(list.map((x) => ({ id: x.id, key: x.key, summary: x.summary, status: x.status?.name ?? null })), null, INDENT));
 }
 
 async function validate(ticket: string): Promise<void> {
@@ -578,7 +582,7 @@ async function validate(ticket: string): Promise<void> {
     if (!lint.problems.length) lint.problems.push((err as Error).message);
     lint.ok = false;
   }
-  console.log(JSON.stringify({ ...lint, ...parsed }, null, 2));
+  console.log(JSON.stringify({ ...lint, ...parsed }, null, INDENT));
   if (!lint.ok) process.exit(3);
 }
 
@@ -605,7 +609,7 @@ async function searchTestCases(opts: SearchOptions): Promise<void> {
   if (opts.label) {
     const hit = byName(await qtm.labels.list(p.id), opts.label);
     if (!hit) {
-      console.log(JSON.stringify({ project: p.key, total: 0, returned: 0, testCases: [], note: `No label named "${opts.label}" in ${p.key}` }, null, 2));
+      console.log(JSON.stringify({ project: p.key, total: 0, returned: 0, testCases: [], note: `No label named "${opts.label}" in ${p.key}` }, null, INDENT));
       return;
     }
     filter.labels = [hit.id];
@@ -633,20 +637,65 @@ async function searchTestCases(opts: SearchOptions): Promise<void> {
       labels: (t.labels ?? []).map((l) => l.name),
       archived: t.archived ?? false,
     })),
-  }, null, 2));
+  }, null, INDENT));
 }
 
-/** One test case with its steps, so an existing case can be compared with a draft. Read-only. */
-async function getTestCase(key: string, versionNo: number | null): Promise<void> {
+/** Runs fn over items with at most `limit` in flight. For reads only: writes stay sequential. */
+async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return out;
+}
+
+const READ_CONCURRENCY = 5;
+
+/**
+ * Test cases with their steps, so existing cases can be compared with a draft. Read-only.
+ * One key prints the case; several print { testCases, notFound, failed }, fetched in parallel in one
+ * process. A key that errors in a batch is listed under failed, so the other keys' results still arrive.
+ */
+async function getTestCases(keys: string[], versionNo: number | null): Promise<void> {
   // A test case key carries its project: PROJ-TC-3 is in PROJ.
-  const p = await projectByKey(key.replace(/-TC-\d+$/, ""));
+  const projects = new Map<string, Promise<{ id: number; key: string; name: string }>>();
+  const projectOf = (key: string) => {
+    const pk = key.replace(/-TC-\d+$/, "");
+    if (!projects.has(pk)) projects.set(pk, projectByKey(pk));
+    return projects.get(pk)!;
+  };
+  const results = await mapLimit(keys, READ_CONCURRENCY, async (key) => {
+    try {
+      return { key, tc: await fetchTestCase(await projectOf(key), key, versionNo) };
+    } catch (err) {
+      if (keys.length === 1) throw err;
+      const notFound = err instanceof ApiError && err.status === 404;
+      return { key, tc: null, error: notFound ? null : (err as Error).message };
+    }
+  });
+  if (keys.length === 1) {
+    console.log(JSON.stringify(results[0].tc, null, INDENT));
+    return;
+  }
+  console.log(JSON.stringify({
+    testCases: results.flatMap((r) => (r.tc ? [r.tc] : [])),
+    notFound: results.filter((r) => !r.tc && !("error" in r && r.error)).map((r) => r.key),
+    failed: results.flatMap((r) => ("error" in r && r.error ? [{ key: r.key, error: r.error }] : [])),
+  }, null, INDENT));
+}
+
+async function fetchTestCase(p: { id: number; key: string }, key: string, versionNo: number | null) {
   const hit = (await qtm.testCases.search({ projectId: p.id, key }, 0, 1)).data?.find((t) => t.key.toUpperCase() === key.toUpperCase());
   if (!hit) throw new ApiError(`Test case ${key} not found in ${p.key}`, 404);
   const version = versionNo ?? hit.version?.versionNo ?? 1;
-  const tc = await qtm.testCases.getVersion(hit.id, version);
-  const steps = await qtm.testCases.steps(hit.id, version);
+  const [tc, steps] = await Promise.all([qtm.testCases.getVersion(hit.id, version), qtm.testCases.steps(hit.id, version)]);
   const name = (v: unknown) => (v && typeof v === "object" && "name" in v ? (v as { name: string }).name : v ?? null);
-  console.log(JSON.stringify({
+  return {
     key: tc.key ?? key,
     version,
     summary: tc.summary ?? null,
@@ -657,7 +706,7 @@ async function getTestCase(key: string, versionNo: number | null): Promise<void>
     folder: name(tc.folder),
     labels: Array.isArray(tc.labels) ? (tc.labels as unknown[]).map(name) : [],
     steps: steps.map((s, i) => ({ n: i + 1, step: s.stepDetails ?? "", testData: s.testData ?? "", expected: s.expectedResult ?? "" })),
-  }, null, 2));
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -813,11 +862,11 @@ async function push(opts: PushOptions): Promise<void> {
   };
 
   if (problems.length) {
-    console.log(JSON.stringify({ ok: false, problems, plan }, null, 2));
+    console.log(JSON.stringify({ ok: false, problems, plan }, null, INDENT));
     process.exit(3);
   }
   if (!opts.confirm) {
-    console.log(JSON.stringify({ ok: true, dryRun: true, plan }, null, 2));
+    console.log(JSON.stringify({ ok: true, dryRun: true, plan }, null, INDENT));
     return;
   }
 
@@ -1029,7 +1078,7 @@ async function push(opts: PushOptions): Promise<void> {
     log.completedAt = now();
   }
   writeLog(log);
-  console.log(JSON.stringify({ ok: verification.ok, log: logPath(ticket).slice(REPO_ROOT.length + 1), summary: summarize(log), verification }, null, 2));
+  console.log(JSON.stringify({ ok: verification.ok, log: logPath(ticket).slice(REPO_ROOT.length + 1), summary: summarize(log), verification }, null, INDENT));
   if (!verification.ok) process.exit(1);
 }
 
@@ -1056,15 +1105,14 @@ async function verifyLog(log: PushLog) {
   for (const id of logged) if (!found.has(id)) issues.push(`Logged test case ${id} not found in the subfolder`);
   for (const t of inFolder) if (!logged.has(t.id)) issues.push(`Subfolder holds ${t.key}, which this push did not log`);
 
-  for (const c of cases) {
+  // Step counts are reads, so they are fetched in parallel; issues keep the CSV's order.
+  const stepIssues = await mapLimit(cases, READ_CONCURRENCY, async (c) => {
     const t = log.testCases[c.id];
-    if (!t) {
-      issues.push(`${c.id} was not created`);
-      continue;
-    }
+    if (!t) return `${c.id} was not created`;
     const steps = await qtm.testCases.steps(t.id, t.versionNo);
-    if (steps.length !== c.steps.length) issues.push(`${c.id} (${t.key}) has ${steps.length} steps in QMetry, CSV has ${c.steps.length}`);
-  }
+    return steps.length !== c.steps.length ? `${c.id} (${t.key}) has ${steps.length} steps in QMetry, CSV has ${c.steps.length}` : null;
+  });
+  issues.push(...stepIssues.filter((x): x is string => x !== null));
 
   let cycleCases = 0;
   if (log.testCycle) {
@@ -1099,7 +1147,7 @@ async function verify(ticket: string): Promise<void> {
       ? { changedSincePush: true, note: "The CSV was edited after the push, so differences below may be edits rather than push problems." }
       : { changedSincePush: false },
     verification: result,
-  }, null, 2));
+  }, null, INDENT));
   if (!result.ok) process.exit(1);
 }
 
@@ -1119,7 +1167,7 @@ async function rollback(ticket: string, confirm: boolean): Promise<void> {
   ];
   const keptLabels = Object.entries(log.labels).filter(([, v]) => v.created).map(([k]) => k);
   if (!confirm) {
-    console.log(JSON.stringify({ dryRun: true, actions, labelsKept: keptLabels, note: "Labels are left in place; other test cases may use them." }, null, 2));
+    console.log(JSON.stringify({ dryRun: true, actions, labelsKept: keptLabels, note: "Labels are left in place; other test cases may use them." }, null, INDENT));
     return;
   }
 
@@ -1152,7 +1200,7 @@ async function rollback(ticket: string, confirm: boolean): Promise<void> {
   log.rollback = { at: now(), done, failed, labelsKept: keptLabels };
   if (!failed.length) log.state = "rolled_back";
   writeLog(log);
-  console.log(JSON.stringify({ ok: failed.length === 0, done, failed, labelsKept: keptLabels }, null, 2));
+  console.log(JSON.stringify({ ok: failed.length === 0, done, failed, labelsKept: keptLabels }, null, INDENT));
   if (failed.length) process.exit(1);
 }
 
@@ -1210,7 +1258,7 @@ async function doctor(): Promise<void> {
   out.ok = problems.length === 0;
   out.problems = problems;
   out.notes = notes;
-  console.log(JSON.stringify(out, null, 2));
+  console.log(JSON.stringify(out, null, INDENT));
   if (problems.length) process.exit(3);
 }
 
@@ -1224,7 +1272,7 @@ const USAGE = `Usage:
   node scripts/qmetry-api.ts create-folder [--project <KEY>] --name <name> (--parent-id <id> | --root) [--type testcase|testcycle|testplan]
   node scripts/qmetry-api.ts plans [--project <KEY>]
   node scripts/qmetry-api.ts search-testcases [--project <KEY>] [--text <words>] [--label <name>] [--issue-id <numeric Jira id>] [--folder-id <id>] [--limit 50]
-  node scripts/qmetry-api.ts testcase --key <PROJ-TC-3> [--version <n>]
+  node scripts/qmetry-api.ts testcase --key <PROJ-TC-3>[,<PROJ-TC-7>,...] [--version <n>]
   node scripts/qmetry-api.ts validate --ticket <KEY-123>
   node scripts/qmetry-api.ts push --ticket <KEY-123> --issue-id <numeric Jira id> --reviewer <name> --name <folder and cycle name>
        (--folder <path> | --folder-id <id>) (--plan <plan key> | --new-plan <summary> | --no-plan)
@@ -1330,9 +1378,12 @@ async function main(): Promise<void> {
       }));
     }
     case "testcase": {
-      const key = need("key").toUpperCase();
-      if (!/^[A-Z][A-Z0-9_]*-TC-\d+$/.test(key)) fail("--key must be a QMetry test case key like PROJ-TC-3");
-      return run(() => getTestCase(key, typeof values.version === "string" ? intArg("version") : null));
+      const keys = [...new Set(need("key").toUpperCase().split(",").map((k) => k.trim()).filter(Boolean))];
+      const bad = keys.filter((k) => !/^[A-Z][A-Z0-9_]*-TC-\d+$/.test(k));
+      if (!keys.length || bad.length) fail(`--key must be QMetry test case keys like PROJ-TC-3 or PROJ-TC-3,PROJ-TC-7${bad.length ? ` (bad: ${bad.join(", ")})` : ""}`);
+      // One version number can't be right for several cases, and a wrong one would read as "not found".
+      if (keys.length > 1 && typeof values.version === "string") fail("--version works with a single --key only");
+      return run(() => getTestCases(keys, typeof values.version === "string" ? intArg("version") : null));
     }
     case "validate":
       return run(() => validate(need("ticket")));

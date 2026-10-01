@@ -29,7 +29,7 @@ Every QMetry call goes through `scripts/qmetry-endpoints.ts`: one typed function
 | `folders [--project <KEY>] [--type testcase\|testcycle\|testplan]` | No | Folder IDs and paths |
 | `plans [--project <KEY>]` | No | Test plan keys and summaries |
 | `search-testcases [--text <words>] [--label <name>] [--issue-id <id>] [--folder-id <id>] [--limit 50]` | No | Existing test cases, for duplicate and regression checks |
-| `testcase --key <PROJ-TC-3> [--version <n>]` | No | One test case with its steps |
+| `testcase --key <PROJ-TC-3>[,<PROJ-TC-7>,...] [--version <n>]` | No | Test cases with their steps; several keys are fetched in parallel |
 | `validate --ticket <KEY-123>` | No | Both CSVs against the test-case-design standard, no API calls. Exit 3 lists `problems` |
 | `push ...` without `--confirm` | No | Dry run: every pre-push check plus the plan of what would be created |
 | `push ... --confirm` | **Yes** | The push. `--allow-existing` only when the user confirms adding to cases QMetry already links to the ticket |
