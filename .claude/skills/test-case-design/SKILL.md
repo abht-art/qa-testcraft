@@ -13,7 +13,7 @@ Scope how deep to go. Default to Critical and state that you did.
 
 | Tier | What it covers | Typical size |
 |---|---|---|
-| Smoke | The golden path only, enough to prove the feature works at all | 1 to 3 cases |
+| Smoke | The golden path only, enough to prove the feature works at all, plus the Smoke checks of the web frontend baseline on a web frontend ticket | 1 to 3 cases, plus 2 on a web frontend ticket |
 | Critical | Golden path, main error paths, key boundaries, permission rules, roughly 80% of real risk | Most tickets land here |
 | Full | Every equivalence class, every boundary, every rule combination, all applicable non-functional checks | Regression-suite depth |
 
@@ -63,7 +63,7 @@ Requirement ID,Requirement,Type,Source,Covered By
 - **Requirement ID**: `R1`, `R2`, `R3`, in the order encountered.
 - **Requirement**: one line describing what it states.
 - **Type**: Functional, Non-functional (performance, security, accessibility), or Technical (data model, integration contract).
-- **Source**: where it came from, so a reviewer can trace it back (Ticket AC, PRD section name, Tech Spec section name, or Figma frame name).
+- **Source**: where it came from, so a reviewer can trace it back (Ticket AC, PRD section name, Tech Spec section name, or Figma frame name). The rows the web frontend baseline adds use `Team standard: web frontend baseline`.
 - **Covered By**: the test case IDs validating it, filled in at verification. Comma-separated inside quotes when there's more than one.
 
 A requirement is its own row if it describes a distinct behavior, rule, or condition, not just a restatement of another row. Don't split one requirement into several rows to inflate the count, and don't merge two distinct requirements into one row to save space.
@@ -102,6 +102,58 @@ Every test case ID is `TC-<PREFIX>-<sequence>`, sequence starting at 01 per pref
 | TC-COMPAT | Compatibility | Behaviour could differ across browsers, devices, screen sizes, or operating systems |
 
 Use only the prefixes that genuinely apply. Don't force a category in to look thorough, and don't skip one that applies. TC-SEC, TC-PERF, TC-A11Y, and TC-COMPAT are the ones most often skipped in practice; include them whenever their trigger is met, even at Critical tier.
+
+## Web frontend baseline
+
+Every web frontend ticket gets two sets of checks the team runs on every frontend change, whatever the module and whether or not the sources mention them. A ticket is a web frontend ticket when its summary contains the word "frontend" (any capitalization) and what it adds or changes is a page in a web browser. A native mobile app screen is not; rule the baseline out with that reason.
+
+Add one RTM row for each set, with Source `Team standard: web frontend baseline`, so the cases trace like any other:
+
+- **URL handling** (Type Functional): the page copes with a URL it can't serve.
+- **Responsive layout** (Type Non-functional): the page renders and works at each screen size the team tests on, and while the screen is freely resized.
+
+### URL handling: TC-NEG, technique Error Guessing
+
+Build every variant from the real page, never from a guessed route. Take the page from the ticket description, in this order:
+
+1. **The page URL**, when the description gives one. Keep only the path and query (`/orders/{id}/edit?tab=items`) and write the host as `{{baseUrl}}`, since a real host fails `validate` (H3). Write the parts that vary as named placeholders (`{id}`), and say in the Precondition which record supplies a valid value.
+2. **Otherwise, how to reach the page**: the menu path (`Orders → Actions → Edit`) or the breadcrumb. Step 1 opens the page that way and has the tester note the URL in the address bar; later steps change one part of that noted URL (replace the ID with `abc123`, misspell the last segment) and open it. State the expected result against the page, not a route you haven't seen.
+3. **Neither:** write the steps against `{{baseUrl}}/{pagePath}` and list the missing URL under Gaps Flagged, so the reviewer fills it in.
+
+An API path in the description (`GET /api/orders/:order_id`) is what the page calls, not the page's own address, so never use it as the URL. It does tell you which record the page works on, which says whether the ID variants apply.
+
+For each page, one case per applicable variant:
+
+| Variant | Applies when | Example |
+|---|---|---|
+| Malformed ID | The URL carries an ID or other parameter | `/orders/abc123/edit` where a UUID (the long random ID format) is expected |
+| Well-formed but unknown ID | The URL carries an ID | A valid UUID that matches no record |
+| Unknown path | Always | A misspelled route segment, or an extra segment after a valid route |
+| Invalid query value | The page reads a query parameter (page, filter, tab) | `?page=-1`, `?page=abc`, an unknown tab name |
+
+Expected results: use the behavior the sources state (a not-found page, an error state, a redirect, with its exact text). Where they state none, don't invent one. Assert what must hold either way: no blank page, no raw error or stack trace, no data from another record, and a way back to a valid page. Then list the unspecified behavior under Gaps Flagged, naming the page and variant.
+
+### Responsive layout: TC-COMPAT
+
+These are the screens the team tests on. Each fixed size gets its own case (technique Equivalence Partitioning), loading the ticket's page and running its main interaction:
+
+| Screen | Size (width x height) | How to set it |
+|---|---|---|
+| Laptop | 1920 x 1200 at 150% display scale, so the browser lays out about 1280 x 800 | The team's laptop with Windows display scale at 150% (Settings, Display, Scale), browser maximized |
+| iPad Air, portrait | 820 x 1180 | Browser developer tools, device toolbar, iPad Air |
+| iPad Air, landscape | 1180 x 820 | The same, rotated |
+
+Then one dedicated case for free resizing (technique Boundary Value Analysis, since the layout changes at width breakpoints): in the device toolbar's Responsive mode, drag the width slowly from the laptop width (1280) down to 820 and back up, pausing wherever the layout changes. The expected results hold at every width along the way, not only at the fixed sizes, and the layout switches cleanly at each breakpoint (the sidebar collapses or expands, columns rearrange) without content jumping, overlapping or disappearing.
+
+Expected results for every responsive case: no horizontal page scroll; wide tables keep every column reachable, scrolling inside their own area rather than being cut off; no overlapping or cut-off text; every control visible and usable by click or touch; dialogs fit the screen; and the main interaction completes. Where the design shows a specific layout for a size, assert that layout.
+
+### Depth by tier
+
+| Tier | URL handling | Responsive layout |
+|---|---|---|
+| Smoke | Malformed ID, or Unknown path when the URL has no ID | iPad Air, portrait |
+| Critical | Every applicable variant | Laptop, iPad Air portrait, iPad Air landscape, and free resizing |
+| Full | Every applicable variant, for every page the ticket touches | The Critical four, plus the laptop at 100% display scale (1920 x 1200) |
 
 ## Test case fields
 

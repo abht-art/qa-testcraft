@@ -25,7 +25,7 @@ Anything that fails and can't be fixed from the available sources belongs in Gap
 
 - [ ] **T1** Every Acceptance Criteria point in the ticket, and every relevant PRD or Tech Spec statement, appears as its own RTM row. Nothing in the sources is missing from the matrix.
 - [ ] **T2** No RTM row restates another, and no row merges two distinct behaviors to save space.
-- [ ] **T3** Every RTM row has a Type of Functional, Non-functional, or Technical, and a Source specific enough to trace back to a named ticket AC item, PRD section, Tech Spec section, or Figma frame.
+- [ ] **T3** Every RTM row has a Type of Functional, Non-functional, or Technical, and a Source specific enough to trace back to a named ticket AC item, PRD section, Tech Spec section, or Figma frame, or `Team standard: web frontend baseline` for the rows that baseline adds.
 - [ ] **T4** Every RTM row's Covered By column names at least one test case ID. Any empty row is listed under Gaps Flagged.
 - [ ] **T5** Every ID in Covered By exists in the test case file, and every value in a case's Covers column exists in the RTM. No orphan on either side.
 
@@ -47,7 +47,8 @@ Anything that fails and can't be fixed from the available sources belongs in Gap
 - [ ] **S5** Accessibility considered: any added or changed user-facing UI. Covered or ruled out with a reason.
 - [ ] **S6** Compatibility considered: behavior that could differ across browsers, devices, screen sizes, or operating systems. Covered or ruled out with a reason.
 - [ ] **S7** No prefix is used whose trigger isn't actually met by this ticket.
-- [ ] **S8** Depth matches the tier requested. Smoke stops at the golden path. Critical adds main error paths, key boundaries, and permission rules. Full covers every class, every boundary, every rule combination, and all applicable non-functional checks.
+- [ ] **S8** Depth matches the tier requested. Smoke stops at the golden path, plus the web frontend baseline's Smoke checks on a web frontend ticket. Critical adds main error paths, key boundaries, and permission rules. Full covers every class, every boundary, every rule combination, and all applicable non-functional checks.
+- [ ] **S9** Web frontend baseline, on a web frontend ticket: an RTM row each for URL handling and responsive layout, with the URL variants the standard sets for this tier, built from the real page (the description's page URL, path only with the host as `{{baseUrl}}`, or else its menu path with the tester noting the URL), never from a guessed route or an API path, and the screen sizes for this tier, including the free resizing case at Critical and Full. A page that can't be located is under Gaps Flagged. Any URL behavior the sources don't state is under Gaps Flagged, not invented. Ruled out with a reason when the ticket isn't a web page.
 
 ## F. Fields, every case
 
