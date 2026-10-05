@@ -36,13 +36,11 @@
       "Bash(grep * .env*)",
       "Bash(source .env*)",
       "Edit(./docs/test-cases/*-qmetry-push.json)",
-      "Write(./docs/test-cases/*-qmetry-push.json)",
       "Read(./node_modules/**)",
       "Read(./package-lock.json)",
       "Read(./**/.DS_Store)",
       "Read(./docs/audit/**)",
-      "Edit(./docs/audit/**)",
-      "Write(./docs/audit/**)"
+      "Edit(./docs/audit/**)"
     ]
   }
 }
